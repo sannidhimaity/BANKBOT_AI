@@ -1,0 +1,152 @@
+[
+  {
+    "name": "check_balance",
+    "examples": [
+      "What is my account balance?",
+      "Show me my balance",
+      "How much money do I have?",
+      "Check my account balance",
+      "Current balance please",
+      "Tell me my savings balance",
+      "What's left in my account?",
+      "Balance check",
+      "How much is in my account?",
+      "Account balance inquiry"
+    ]
+  },
+  {
+    "name": "transfer_money",
+    "examples": [
+      "Transfer money to John",
+      "Send 500 rupees to Amit",
+      "I want to transfer funds",
+      "Move money between accounts",
+      "Pay my friend 200",
+      "Wire transfer to account number",
+      "Send funds to someone",
+      "Transfer 1000 to Priya",
+      "I need to send money",
+      "Make a payment to Rahul"
+    ]
+  },
+  {
+    "name": "loan_inquiry",
+    "examples": [
+      "I need a loan",
+      "What are the loan options?",
+      "Tell me about personal loans",
+      "How can I apply for a home loan?",
+      "Loan eligibility criteria",
+      "Interest rate on loans",
+      "Can I get a car loan?",
+      "Education loan details",
+      "What is the EMI for a loan?",
+      "Apply for business loan"
+    ]
+  },
+  {
+    "name": "credit_card",
+    "examples": [
+      "Apply for a credit card",
+      "My credit card bill",
+      "Credit card limit increase",
+      "Block my credit card",
+      "New credit card application",
+      "Credit card statement",
+      "Credit card rewards points",
+      "Lost my credit card",
+      "Credit card due date",
+      "Credit card interest rate"
+    ]
+  },
+  {
+    "name": "transaction_history",
+    "examples": [
+      "Show my recent transactions",
+      "Transaction history for last month",
+      "What did I spend on?",
+      "List my last 5 transactions",
+      "Account statement",
+      "View my spending",
+      "Last transaction details",
+      "Show me my purchases",
+      "Monthly statement",
+      "Transaction summary"
+    ]
+  },
+  {
+    "name": "open_account",
+    "examples": [
+      "Open a new bank account",
+      "I want to create an account",
+      "How to open savings account?",
+      "New account opening procedure",
+      "What documents do I need to open account?",
+      "Open current account",
+      "Zero balance account",
+      "Joint account opening",
+      "Fixed deposit account",
+      "Open a demat account"
+    ]
+  },
+  {
+    "name": "atm_services",
+    "examples": [
+      "Nearest ATM",
+      "Where is the ATM?",
+      "ATM cash withdrawal limit",
+      "Block ATM card",
+      "Change ATM PIN",
+      "ATM not working",
+      "Cash withdrawal from ATM",
+      "Lost my debit card",
+      "ATM card replacement",
+      "Increase ATM withdrawal limit"
+    ]
+  },
+  {
+    "name": "customer_support",
+    "examples": [
+      "I need help",
+      "Connect me to an agent",
+      "Customer service",
+      "Talk to a human",
+      "I have a complaint",
+      "Support please",
+      "Help me with my problem",
+      "Speak to representative",
+      "File a complaint",
+      "Escalate my issue"
+    ]
+  },
+  {
+    "name": "greet",
+    "examples": [
+      "Hello",
+      "Hi there",
+      "Good morning",
+      "Hey",
+      "Hi BankBot",
+      "Good evening",
+      "Namaste",
+      "Good afternoon",
+      "Howdy",
+      "Hey bot"
+    ]
+  },
+  {
+    "name": "goodbye",
+    "examples": [
+      "Bye",
+      "Goodbye",
+      "See you later",
+      "Thanks bye",
+      "That is all",
+      "Exit",
+      "Quit",
+      "Take care",
+      "Goodbye bot",
+      "I am done"
+    ]
+  }
+]
