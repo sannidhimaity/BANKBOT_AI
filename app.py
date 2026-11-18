@@ -2,7 +2,7 @@
 app.py — BankBot AI  |  Streamlit entry point
 Run: streamlit run app.py
 """
-
+from backend.banking import generate_user_response
 import sys
 import os
 import time
@@ -22,6 +22,13 @@ from nlu_engine import (
     load_intent_model,
     extract_entities,
 )
+
+from database.db import SessionLocal
+from database.models import User
+
+from ui.login import render_login
+from ui.register import render_register
+
 from backend import generate_response
 
 # ─────────────────────────────────────────────
@@ -34,6 +41,128 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+
+# ==========================================
+# AUTHENTICATION GATE
+# ==========================================
+
+# Initialize appearance and authentication before rendering either auth page or dashboard.
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+# Keep the authentication screens visually consistent with the dashboard theme.
+auth_dark = st.session_state.dark_mode
+if auth_dark:
+    auth_bg, auth_card, auth_text = "#0a0a12", "#13132a", "#e2e8f0"
+    auth_muted, auth_border, auth_input = "#aab5c5", "#343454", "#1a1a35"
+    auth_accent, auth_button_hover = "#7c3aed", "#6d28d9"
+else:
+    auth_bg, auth_card, auth_text = "#f5f6f8", "#ffffff", "#202a33"
+    auth_muted, auth_border, auth_input = "#566574", "#d8dee7", "#ffffff"
+    auth_accent, auth_button_hover = "#386b68", "#2d5855"
+
+st.markdown(f"""
+<style>
+.stApp {{ background: {auth_bg} !important; }}
+.main .block-container {{ max-width: 680px !important; padding: 2.2rem 1.5rem 3rem !important; }}
+.auth-brand {{ text-align: center; padding: 18px 0 28px; }}
+.auth-brand-title {{ color: {auth_text} !important; font-size: 2rem; font-weight: 800;
+    letter-spacing: -.8px; line-height: 1.25; }}
+.auth-brand-subtitle {{ color: {auth_muted} !important; font-size: .95rem; margin-top: 7px; }}
+.auth-heading {{ text-align: center; padding: 8px 0 22px; }}
+.auth-eyebrow {{ color: {auth_accent}; font-size: .7rem; font-weight: 800;
+    letter-spacing: 1.8px; margin-bottom: 10px; }}
+.auth-heading h1 {{ color: {auth_text} !important; font-size: 1.8rem;
+    font-weight: 800; letter-spacing: -.7px; margin: 0 0 8px; }}
+.auth-heading p {{ color: {auth_muted} !important; font-size: .95rem; margin: 0; }}
+[data-testid="stForm"] {{ background: transparent; border: 0 !important; padding: 0 !important; }}
+.stTextInput label, .stTextInput label p {{ color: {auth_text} !important; font-weight: 650 !important; }}
+.stTextInput input {{ background: {auth_input} !important; color: {auth_text} !important;
+    border: 1px solid {auth_border} !important; border-radius: 10px !important; min-height: 44px; }}
+.stTextInput input::placeholder {{ color: {auth_muted} !important; opacity: 1; }}
+.stFormSubmitButton button {{ background: {auth_accent} !important; color: #fff !important;
+    border: 0 !important; border-radius: 10px !important; min-height: 46px;
+    font-weight: 700 !important; }}
+.stFormSubmitButton button:hover {{ background: {auth_button_hover} !important; }}
+[data-testid="stRadio"] label, [data-testid="stRadio"] p {{ color: {auth_text} !important; }}
+[data-testid="stAlert"] {{ border-radius: 10px; }}
+@media (max-width: 640px) {{ .auth-brand {{ padding: 12px 0 22px; }} }}
+</style>
+""", unsafe_allow_html=True)
+
+
+# Verify logged-in user against the database
+if st.session_state["authenticated"]:
+
+    db = SessionLocal()
+
+    try:
+        current_user = db.query(User).filter(
+            User.id == st.session_state.get("user_id")
+        ).first()
+
+        if current_user:
+
+            # Refresh identity and role from database
+            st.session_state["user_name"] = current_user.name
+            st.session_state["user_email"] = current_user.email
+            st.session_state["user_role"] = current_user.role
+
+        else:
+
+            # Invalid or deleted user
+            for key in [
+                "authenticated",
+                "user_id",
+                "user_name",
+                "user_email",
+                "user_role"
+            ]:
+                st.session_state.pop(key, None)
+
+            st.session_state["authenticated"] = False
+
+    finally:
+        db.close()
+
+
+# Show login/register if user is not authenticated
+if not st.session_state["authenticated"]:
+
+    st.markdown(
+        """
+        <div class="auth-brand">
+            <div class="auth-brand-title">🏦 BankBot AI</div>
+            <div class="auth-brand-subtitle">Your intelligent banking assistant</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    appearance_col, _ = st.columns([1, 3])
+    with appearance_col:
+        auth_mode_label = "☀️ Light appearance" if auth_dark else "🌙 Dark appearance"
+        if st.button(auth_mode_label, key="auth_theme_toggle", use_container_width=True):
+            st.session_state.dark_mode = not st.session_state.dark_mode
+            st.rerun()
+
+    auth_page = st.radio(
+        "Choose an option",
+        ["Login", "Register"],
+        horizontal=True,
+        key="main_auth_page",
+        label_visibility="collapsed",
+    )
+
+    if auth_page == "Login":
+        render_login()
+    else:
+        render_register()
+
+    st.stop()
+
 # ─────────────────────────────────────────────
 #  SESSION STATE INIT
 # ─────────────────────────────────────────────
@@ -43,10 +172,8 @@ if "chat_history"  not in st.session_state:
     st.session_state.chat_history = []          # list of (role, text, meta)
 if "model_trained" not in st.session_state:
     st.session_state.model_trained = load_intent_model() is not None
-if "dark_mode"     not in st.session_state:
-    st.session_state.dark_mode = False
 if "page"          not in st.session_state:
-    st.session_state.page = "Home"
+    st.session_state.page = "🏠  Home"
 
 # ─────────────────────────────────────────────
 #  THEME TOKENS
@@ -90,41 +217,42 @@ if dark:
     STAT_BG       = "#13132a"
     DIVIDER       = "#1e1e3a"
 else:
-    BG_APP        = "#f0f4ff"
-    BG_SIDEBAR    = "#e8efff"
+    # Soft, warm light theme: lower glare with stronger text contrast.
+    BG_APP        = "#f5f6f8"
+    BG_SIDEBAR    = "#eef0f3"
     BG_CARD       = "#ffffff"
     BG_INPUT      = "#ffffff"
-    BG_HOVER      = "#f0f4ff"
-    BORDER        = "#bfdbfe"
-    ACCENT        = "#2563eb"       # blue-600
-    ACCENT_LIGHT  = "#60a5fa"       # blue-400
-    ACCENT_SOFT   = "#eff6ff"       # blue-50
-    BTN_BG        = "#2563eb"
-    BTN_HOVER     = "#1d4ed8"
+    BG_HOVER      = "#e9edf2"
+    BORDER        = "#d8dee7"
+    ACCENT        = "#386b68"       # muted teal
+    ACCENT_LIGHT  = "#5b8985"
+    ACCENT_SOFT   = "#e8f0ef"
+    BTN_BG        = "#386b68"
+    BTN_HOVER     = "#2d5855"
     BTN_TEXT      = "#ffffff"
-    TEXT_PRIMARY  = "#1e293b"
-    TEXT_SECONDARY= "#475569"
-    TEXT_MUTED    = "#94a3b8"
-    CHAT_USER_BG  = "#2563eb"
+    TEXT_PRIMARY  = "#202a33"
+    TEXT_SECONDARY= "#46525e"
+    TEXT_MUTED    = "#687583"
+    CHAT_USER_BG  = "#386b68"
     CHAT_USER_TXT = "#ffffff"
     CHAT_BOT_BG   = "#ffffff"
-    CHAT_BOT_TXT  = "#1e293b"
-    CHAT_BOT_BDR  = "#bfdbfe"
-    STATUS_OK_BG  = "#f0fdf4"
-    STATUS_OK_TXT = "#166534"
-    STATUS_WN_BG  = "#fffbeb"
-    STATUS_WN_TXT = "#92400e"
-    BADGE_BG      = "#dbeafe"
-    BADGE_TXT     = "#1e40af"
-    EXPANDER_BG   = "#f8faff"
-    EXPANDER_BDR  = "#bfdbfe"
-    SHADOW        = "rgba(37,99,235,0.10)"
-    TAG_BG        = "#eff6ff"
-    TAG_TXT       = "#1d4ed8"
-    SIDEBAR_TXT   = "#1e3a8a"
-    ICON_COLOR    = "#2563eb"
-    STAT_BG       = "#f8faff"
-    DIVIDER       = "#e2e8f0"
+    CHAT_BOT_TXT  = "#26323c"
+    CHAT_BOT_BDR  = "#d8dee7"
+    STATUS_OK_BG  = "#e7f3ed"
+    STATUS_OK_TXT = "#245c42"
+    STATUS_WN_BG  = "#f8f0df"
+    STATUS_WN_TXT = "#76551c"
+    BADGE_BG      = "#e6efed"
+    BADGE_TXT     = "#2d5b57"
+    EXPANDER_BG   = "#ffffff"
+    EXPANDER_BDR  = "#d8dee7"
+    SHADOW        = "rgba(31,45,56,0.07)"
+    TAG_BG        = "#edf2f1"
+    TAG_TXT       = "#315f5b"
+    SIDEBAR_TXT   = "#34434e"
+    ICON_COLOR    = "#386b68"
+    STAT_BG       = "#ffffff"
+    DIVIDER       = "#e1e5ea"
 
 # ─────────────────────────────────────────────
 #  GLOBAL CSS
@@ -192,6 +320,17 @@ p, li, label, .stMarkdown {{
     transition: all 0.18s ease !important;
     box-shadow: 0 2px 8px {SHADOW} !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
+}}
+.stButton > button,
+.stButton > button p,
+.stButton > button span,
+.stButton > button div {{
+    color: #ffffff !important;
+}}
+.stFormSubmitButton > button,
+.stFormSubmitButton > button p,
+.stFormSubmitButton > button span {{
+    color: #ffffff !important;
 }}
 .stButton > button:hover {{
     background: {BTN_HOVER} !important;
@@ -534,7 +673,7 @@ hr {{
 /* ── Status pill ── */
 .status-ok {{
     background: {STATUS_OK_BG};
-    color: {STATUS_OK_TXT};
+    color: {STATUS_OK_TXT} !important;
     padding: 6px 14px;
     border-radius: 8px;
     font-size: 0.85rem;
@@ -543,12 +682,93 @@ hr {{
 }}
 .status-warn {{
     background: {STATUS_WN_BG};
-    color: {STATUS_WN_TXT};
+    color: {STATUS_WN_TXT} !important;
     padding: 6px 14px;
     border-radius: 8px;
     font-size: 0.85rem;
     font-weight: 600;
     display: inline-block;
+}}
+
+/* ── Accessible alert contrast ── */
+[data-testid="stAlert"] p,
+[data-testid="stAlert"] [data-testid="stMarkdownContainer"],
+[data-testid="stAlert"] [data-testid="stMarkdownContainer"] p {{
+    color: inherit !important;
+    font-weight: 600 !important;
+}}
+[data-testid="stAlert"] {{ border-radius: 10px !important; }}
+[data-testid="stMetric"] label, [data-testid="stMetric"] [data-testid="stMetricValue"] {{
+    color: {TEXT_PRIMARY} !important;
+}}
+
+/* ── Refined page rhythm and responsive layout ── */
+.main .block-container {{
+    padding-top: 1.6rem !important;
+    padding-bottom: 3rem !important;
+}}
+.page-header {{
+    padding: 30px 34px !important;
+    margin-bottom: 22px !important;
+}}
+.page-header h1 {{
+    font-size: clamp(1.55rem, 2.4vw, 2rem) !important;
+    line-height: 1.25 !important;
+}}
+.page-header p {{
+    line-height: 1.65 !important;
+    max-width: 720px;
+}}
+.feature-card {{
+    min-height: 176px;
+    padding: 22px !important;
+    margin-bottom: 12px;
+}}
+.feature-card .title {{
+    line-height: 1.4;
+}}
+.feature-card .desc {{
+    line-height: 1.65;
+}}
+.chat-wrapper {{
+    gap: 16px !important;
+    padding: 8px 2px 14px;
+}}
+.bubble-user, .bubble-bot {{
+    overflow-wrap: anywhere;
+    line-height: 1.7 !important;
+}}
+.chat-input-area {{
+    padding: 14px 16px !important;
+    margin-top: 16px;
+}}
+.stMetric {{
+    background: {STAT_BG};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+    padding: 12px 16px;
+}}
+.stForm {{
+    border: 0 !important;
+}}
+.stFormSubmitButton > button {{
+    min-height: 44px;
+}}
+.stTextInput > div > div > input::placeholder {{
+    color: {TEXT_MUTED} !important;
+    opacity: 1 !important;
+}}
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li {{
+    line-height: 1.65;
+}}
+@media (max-width: 900px) {{
+    .main .block-container {{ padding-left: 1.1rem !important; padding-right: 1.1rem !important; }}
+    .feature-card {{ min-height: 150px; }}
+}}
+@media (max-width: 640px) {{
+    .page-header {{ padding: 22px !important; }}
+    .bubble-user, .bubble-bot {{ max-width: 94% !important; }}
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -598,11 +818,13 @@ def render_confidence_bars(all_scores: dict):
     st.markdown(bars_html, unsafe_allow_html=True)
 
 
+
 # ─────────────────────────────────────────────
-#  SIDEBAR
+# SIDEBAR
 # ─────────────────────────────────────────────
 
 with st.sidebar:
+
     # Logo / title
     st.markdown(f"""
     <div style="padding: 16px 4px 8px 4px;">
@@ -617,27 +839,90 @@ with st.sidebar:
 
     st.markdown("---")
 
+    # Logged-in user information
+    st.markdown(
+        f'<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:{TEXT_MUTED};text-transform:uppercase;">Logged in as</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        f"**👤 {st.session_state.get('user_name', 'User')}**"
+    )
+
+    st.caption(
+        st.session_state.get("user_email", "")
+    )
+
+    # Logout
+    if st.button(
+        "🚪 Logout",
+        key="main_logout",
+        use_container_width=True
+    ):
+
+        for key in [
+            "authenticated",
+            "user_id",
+            "user_name",
+            "user_email",
+            "user_role",
+            "chat_history",
+            "page"
+        ]:
+            st.session_state.pop(key, None)
+
+        st.rerun()
+
+    st.markdown("---")
+
     # Navigation
-    st.markdown(f'<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:{TEXT_MUTED};text-transform:uppercase;margin-bottom:8px;">Navigation</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:{TEXT_MUTED};text-transform:uppercase;margin-bottom:8px;">Navigation</div>',
+        unsafe_allow_html=True
+    )
+
+    # Chatbot is now the main page, not a separate sidebar destination.
+    nav_options = ["🏠  Home"]
+
+    # Trainer available only to admins
+    if st.session_state.get("user_role") == "admin":
+        nav_options.append("🧠  Trainer")
+
+    current_page = st.session_state.get(
+        "page",
+        "🏠  Home"
+    )
+
+    if current_page not in nav_options:
+        current_page = "🏠  Home"
+
     page = st.radio(
         "nav",
-        ["🏠  Home", "💬  Chatbot", "🧠  Trainer"],
-        label_visibility="collapsed",
+        nav_options,
+        index=nav_options.index(current_page),
+        key="main_navigation",
+        label_visibility="collapsed"
     )
+
     st.session_state.page = page
 
     st.markdown("---")
 
     # Status
-    st.markdown(f'<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:{TEXT_MUTED};text-transform:uppercase;margin-bottom:10px;">Status</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:{TEXT_MUTED};text-transform:uppercase;margin-bottom:10px;">Status</div>',
+        unsafe_allow_html=True
+    )
 
     model_ok = st.session_state.model_trained
+
     st.markdown(
         f'<div class="{"status-ok" if model_ok else "status-warn"}">'
         f'{"✅ Model ready" if model_ok else "⚠️ Not trained"}'
         f'</div>',
         unsafe_allow_html=True,
     )
+
     st.markdown(f"""
     <div style="margin-top:10px; font-size:0.83rem; color:{TEXT_SECONDARY};">
         <div style="margin-bottom:4px;">📚 Intents: <b style="color:{ACCENT};">{len(st.session_state.intents)}</b></div>
@@ -648,101 +933,59 @@ with st.sidebar:
     st.markdown("---")
 
     # Dark / Light mode toggle
-    st.markdown(f'<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:{TEXT_MUTED};text-transform:uppercase;margin-bottom:8px;">Appearance</div>', unsafe_allow_html=True)
-    mode_label = "☀️ Switch to Light Mode" if dark else "🌙 Switch to Dark Mode"
-    if st.button(mode_label, key="toggle_mode", use_container_width=True):
+    st.markdown(
+        f'<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:{TEXT_MUTED};text-transform:uppercase;margin-bottom:8px;">Appearance</div>',
+        unsafe_allow_html=True
+    )
+
+    mode_label = (
+        "☀️ Switch to Light Mode"
+        if dark else
+        "🌙 Switch to Dark Mode"
+    )
+
+    if st.button(
+        mode_label,
+        key="toggle_mode",
+        use_container_width=True
+    ):
         st.session_state.dark_mode = not st.session_state.dark_mode
         st.rerun()
 
     st.markdown("---")
-    st.markdown(f'<div style="font-size:0.72rem; color:{TEXT_MUTED}; text-align:center;">v1.0.0 · BankBot AI</div>', unsafe_allow_html=True)
 
+    # Version
+    st.markdown(
+        f'<div style="font-size:0.72rem; color:{TEXT_MUTED}; text-align:center;">v1.0.0 · BankBot AI</div>',
+        unsafe_allow_html=True
+    )
 
 # ─────────────────────────────────────────────
-#  HOME PAGE
+#  HOME PAGE — CHATBOT FIRST
 # ─────────────────────────────────────────────
 
 if page == "🏠  Home":
     st.markdown(f"""
     <div class="page-header">
         <h1>Welcome to BankBot AI 🏦</h1>
-        <p>Your intelligent 24×7 banking assistant — powered by natural language understanding.</p>
+        <p>Your banking assistant, ready when you are. Ask about balances, transactions and banking services in natural language.</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Stats row
-    total_examples = sum(len(i["examples"]) for i in st.session_state.intents)
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown(f'<div class="stat-card"><div class="stat-number">{len(st.session_state.intents)}</div><div class="stat-label">Intents</div></div>', unsafe_allow_html=True)
-    with col2:
-        st.markdown(f'<div class="stat-card"><div class="stat-number">{total_examples}</div><div class="stat-label">Training examples</div></div>', unsafe_allow_html=True)
-    with col3:
-        st.markdown(f'<div class="stat-card"><div class="stat-number">{"✓" if st.session_state.model_trained else "✗"}</div><div class="stat-label">Model trained</div></div>', unsafe_allow_html=True)
-    with col4:
-        st.markdown(f'<div class="stat-card"><div class="stat-number">{len(st.session_state.chat_history)}</div><div class="stat-label">Messages</div></div>', unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Feature cards
-    st.markdown(f'<h2 style="color:{TEXT_PRIMARY}; margin-bottom:16px;">What can BankBot do?</h2>', unsafe_allow_html=True)
-
-    fc1, fc2, fc3, fc4 = st.columns(4)
-    features = [
-        ("💰", "Balance Inquiry", "Check your account balance and get detailed breakdowns instantly."),
-        ("💸", "Fund Transfers", "Transfer money to anyone via NEFT/IMPS with entity extraction."),
-        ("🏠", "Loan Services", "Explore personal, home, car, and education loan options."),
-        ("💳", "Credit Cards", "Apply, manage, block, or check credit card details."),
-        ("📊", "Transactions", "View recent transactions and monthly spending summaries."),
-        ("🏦", "Account Opening", "Open savings, current, or fixed deposit accounts digitally."),
-        ("🏧", "ATM Services", "Find ATMs, change PIN, block debit cards."),
-        ("🎧", "Support", "Connect to agents, raise complaints, track tickets."),
-    ]
-    cols = st.columns(4)
-    for i, (icon, title, desc) in enumerate(features):
-        with cols[i % 4]:
-            st.markdown(f"""
-            <div class="feature-card">
-                <span class="icon">{icon}</span>
-                <div class="title">{title}</div>
-                <div class="desc">{desc}</div>
-            </div><br>
-            """, unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown(f'<h2 style="color:{TEXT_PRIMARY}; margin-bottom:12px;">Quick Start</h2>', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div style="background:{BG_CARD}; border:1px solid {BORDER}; border-radius:12px; padding:20px;">
-        <p style="color:{TEXT_SECONDARY}; margin-bottom:12px; font-size:0.92rem;">
-            <b>Step 1:</b> Go to <b>🧠 Trainer</b> and click <b>Train Model</b> (pre-loaded with 10 intents).<br>
-            <b>Step 2:</b> Go to <b>💬 Chatbot</b> and start chatting!<br>
-            <b>Step 3:</b> Add new intents in the Trainer anytime and retrain.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ─────────────────────────────────────────────
-#  CHATBOT PAGE
-# ─────────────────────────────────────────────
-
-elif page == "💬  Chatbot":
-    st.markdown(f"""
-    <div class="page-header">
-        <h1>💬 Chat with BankBot</h1>
-        <p>Ask about your balance, transfers, loans, credit cards, or transactions.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Model status banner
+    # Model status
     if not st.session_state.model_trained:
-        st.warning("⚠️ Model not trained yet. Go to **🧠 Trainer** and click **Train Model** first.")
+        st.warning("⚠️ The NLU model has not been trained yet. An administrator can train it from Trainer.")
     else:
-        st.markdown(f'<span class="status-ok">✅ Model ready — start chatting!</span><br><br>', unsafe_allow_html=True)
+        st.markdown(
+            '<span class="status-ok">✅ BankBot is ready — ask me anything!</span><br><br>',
+            unsafe_allow_html=True
+        )
 
-    # Quick action chips
-    st.markdown(f'<div style="margin-bottom:12px; font-size:0.82rem; color:{TEXT_MUTED}; font-weight:600;">Quick actions:</div>', unsafe_allow_html=True)
-    qa_cols = st.columns(6)
+    # Quick actions
+    st.markdown(
+        f'<div style="margin:22px 0 12px; font-size:0.76rem; color:{TEXT_MUTED}; font-weight:700; letter-spacing:1px;">START WITH A QUICK ACTION</div>',
+        unsafe_allow_html=True
+    )
     quick_actions = [
         "Check my balance",
         "Show transactions",
@@ -751,56 +994,31 @@ elif page == "💬  Chatbot":
         "Block my card",
         "Nearest ATM",
     ]
+    qa_cols = st.columns(3)
     for i, qa in enumerate(quick_actions):
-        with qa_cols[i]:
-            if st.button(qa, key=f"qa_{i}", use_container_width=True):
+        with qa_cols[i % 3]:
+            if st.button(qa, key=f"home_qa_{i}", use_container_width=True):
                 if not st.session_state.model_trained:
-                    reply = "⚠️ Please train the model first."
+                    reply = "⚠️ The model has not been trained yet. Please contact an administrator."
                     meta = {}
                 else:
-                    result   = predict_intent(qa)
+                    result = predict_intent(qa)
                     entities = extract_entities(qa)
-                    reply    = generate_response(result["intent"], entities)
-                    meta     = result
-                st.session_state.chat_history.append(("You",    qa,    {}))
+                    reply = generate_user_response(
+                        result["intent"],
+                        entities,
+                        st.session_state["user_id"]
+                    )
+                    meta = result
+                st.session_state.chat_history.append(("You", qa, {}))
                 st.session_state.chat_history.append(("BankBot", reply, meta))
                 st.rerun()
 
     st.markdown("---")
 
-    # Input area
-    st.markdown(f'<div class="chat-input-area">', unsafe_allow_html=True)
-    inp_col, btn_col = st.columns([5, 1])
-    with inp_col:
-        user_input = st.text_input(
-            "Message",
-            placeholder="Type your banking query… e.g. 'What is my balance?'",
-            key="chat_input",
-            label_visibility="collapsed",
-        )
-    with btn_col:
-        send = st.button("Send ➤", key="send_btn", use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    if send and user_input.strip():
-        if not st.session_state.model_trained:
-            reply = "⚠️ Model not trained. Please go to the **🧠 Trainer** page and train the model first."
-            meta  = {}
-        else:
-            with st.spinner("Thinking…"):
-                result   = predict_intent(user_input)
-                entities = extract_entities(user_input)
-                reply    = generate_response(result["intent"], entities)
-                meta     = result
-                time.sleep(0.3)  # slight pause for UX
-
-        st.session_state.chat_history.append(("You",     user_input, {}))
-        st.session_state.chat_history.append(("BankBot", reply,      meta))
-        st.rerun()
-
-    # Chat display
+    # Conversation history
     if not st.session_state.chat_history:
-        st.markdown(f"""
+        st.markdown("""
         <div class="chat-row-bot">
           <div>
             <div class="chat-label-bot">BankBot</div>
@@ -821,32 +1039,114 @@ elif page == "💬  Chatbot":
             render_chat_message(sender, msg, meta)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Debug panel (expandable)
-    last_bot = [(m, meta) for s, m, meta in st.session_state.chat_history if s == "BankBot" and meta]
+    # Message composer — clear_on_submit empties the field after Send/Enter.
+    st.markdown('<div class="chat-input-area">', unsafe_allow_html=True)
+    with st.form(key="chat_form", clear_on_submit=True):
+        inp_col, btn_col = st.columns([5, 1])
+        with inp_col:
+            user_input = st.text_input(
+                "Message",
+                placeholder="Type your banking query… e.g. 'What is my balance?'",
+                key="chat_input",
+                label_visibility="collapsed",
+            )
+        with btn_col:
+            send = st.form_submit_button("Send ➤", use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if send and user_input.strip():
+        if not st.session_state.model_trained:
+            reply = "⚠️ The NLU model has not been trained yet. Please contact an administrator."
+            meta = {}
+        else:
+            with st.spinner("Thinking…"):
+                result = predict_intent(user_input)
+                entities = extract_entities(user_input)
+                reply = generate_user_response(
+                    result["intent"],
+                    entities,
+                    st.session_state["user_id"]
+                )
+                meta = result
+                time.sleep(0.3)
+
+        st.session_state.chat_history.append(("You", user_input, {}))
+        st.session_state.chat_history.append(("BankBot", reply, meta))
+        st.rerun()
+
+    # Prediction details
+    last_bot = [
+        (message, meta)
+        for sender, message, meta in st.session_state.chat_history
+        if sender == "BankBot" and meta
+    ]
     if last_bot:
         with st.expander("🔍 Last prediction details", expanded=False):
             _, last_meta = last_bot[-1]
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown(f"**Intent:** `{last_meta.get('intent','—')}`")
-                st.markdown(f"**Confidence:** `{round(last_meta.get('confidence',0)*100, 1)}%`")
+                st.markdown(f"**Intent:** `{last_meta.get('intent', '—')}`")
+                st.markdown(f"**Confidence:** `{round(last_meta.get('confidence', 0) * 100, 1)}%`")
             with c2:
                 if last_meta.get("all_scores"):
                     render_confidence_bars(last_meta["all_scores"])
 
-    # Clear chat
     if st.session_state.chat_history:
-        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🗑️ Clear conversation", key="clear_chat"):
             st.session_state.chat_history = []
             st.rerun()
+
+    # Keep the feature overview below the working chatbot.
+    st.markdown("---")
+    total_examples = sum(len(i["examples"]) for i in st.session_state.intents)
+    st.markdown(f"""
+    <div style="margin:8px 0 18px;">
+      <div style="font-size:0.75rem; font-weight:700; letter-spacing:1px; color:{TEXT_MUTED}; margin-bottom:6px;">EXPLORE THE ASSISTANT</div>
+      <h2 style="color:{TEXT_PRIMARY}; margin:0;">What can BankBot help you with?</h2>
+      <p style="color:{TEXT_SECONDARY}; margin-top:6px;">Explore the services and capabilities available in this prototype.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    stats_col1, stats_col2, stats_col3 = st.columns(3)
+    with stats_col1:
+        st.metric("Supported intents", len(st.session_state.intents))
+    with stats_col2:
+        st.metric("Training examples", total_examples)
+    with stats_col3:
+        st.metric("Messages in this session", len(st.session_state.chat_history) // 2)
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+    features = [
+        ("💰", "Balance Inquiry", "Check your account balance and get detailed breakdowns instantly."),
+        ("💸", "Fund Transfers", "Explore the transfer conversation flow. Actual bank-network transfers are not connected."),
+        ("🏠", "Loan Services", "Explore personal, home, car, and education loan options."),
+        ("💳", "Credit Cards", "Explore credit-card queries and common card-service guidance."),
+        ("📊", "Transactions", "Review transaction-history functionality for your linked demo account."),
+        ("🏦", "Account Opening", "Learn about savings, current and fixed-deposit account options."),
+        ("🏧", "ATM Services", "Get general ATM and debit-card service guidance."),
+        ("🎧", "Support", "Get guidance for common banking support questions."),
+    ]
+    feature_cols = st.columns(4)
+    for i, (icon, title, desc) in enumerate(features):
+        with feature_cols[i % 4]:
+            st.markdown(f"""
+            <div class="feature-card">
+                <span class="icon">{icon}</span>
+                <div class="title">{title}</div>
+                <div class="desc">{desc}</div>
+            </div><br>
+            """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
 #  TRAINER PAGE
 # ─────────────────────────────────────────────
-
 elif page == "🧠  Trainer":
+    if st.session_state.get("user_role") != "admin":
+        st.error("You are not authorized to access the Trainer.")
+        st.session_state.page = "🏠  Home"
+        st.stop()
+
     st.markdown(f"""
     <div class="page-header">
         <h1>🧠 NLU Trainer</h1>

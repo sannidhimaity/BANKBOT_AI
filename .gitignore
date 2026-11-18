@@ -1,6 +1,13 @@
 venv/
 __pycache__/
+*.py[cod]
 *.pyc
 .env
 *.db
 .DS_Store
+test_auth.py
+test_register_ui.py
+*.zip
+pages_backup/
+test_app.py
+seed_demo_data.py
